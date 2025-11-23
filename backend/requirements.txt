@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+python-socketio
+redis
+upstash-redis
+python-multipart
+requests
+gradio_client

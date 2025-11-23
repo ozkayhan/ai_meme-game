@@ -1,0 +1,6 @@
+gradio
+insightface
+onnxruntime
+opencv-python
+Pillow
+numpy
