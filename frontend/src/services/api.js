@@ -7,16 +7,13 @@ export const api = axios.create({
     timeout: 60000, // 60s timeout for AI operations
 });
 
-export const uploadTempImage = async (file) => {
-    const formData = new FormData();
-    formData.append("file", file);
-
-    const response = await api.post("/api/upload-temp", formData, {
-        headers: {
-            "Content-Type": "multipart/form-data",
-        },
+export const blobToBase64 = (blob) => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
     });
-    return response.data;
 };
 
 export const wakeUpServer = async () => {

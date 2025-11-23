@@ -2,15 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import WebcamCapture from '../components/WebcamCapture';
 import Button from '../components/Button';
-import { uploadTempImage, wakeUpServer } from '../services/api';
+import { blobToBase64, wakeUpServer } from '../services/api';
 import { socket } from '../services/socket';
 
 const Home = () => {
     const navigate = useNavigate();
     const [step, setStep] = useState(1); // 1: Nick, 2: Photo, 3: Menu
     const [nick, setNick] = useState("");
-    const [avatarBlob, setAvatarBlob] = useState(null);
-    const [avatarUrl, setAvatarUrl] = useState(null);
+    const [avatarUrl, setAvatarUrl] = useState(null); // Now stores Base64 string
     const [isUploading, setIsUploading] = useState(false);
     const [roomInput, setRoomInput] = useState("");
     const [showJoinInput, setShowJoinInput] = useState(false);
@@ -23,21 +22,16 @@ const Home = () => {
         if (nick.trim().length > 0) setStep(2);
     };
 
-    const handlePhotoCapture = (blob, previewUrl) => {
-        setAvatarBlob(blob);
-        // Automatically upload
-        handleUpload(blob);
-    };
-
-    const handleUpload = async (blob) => {
+    const handlePhotoCapture = async (blob, previewUrl) => {
         setIsUploading(true);
         try {
-            const res = await uploadTempImage(blob);
-            setAvatarUrl(res.url);
+            // Convert to Base64
+            const base64 = await blobToBase64(blob);
+            setAvatarUrl(base64);
             setStep(3);
         } catch (error) {
-            console.error("Upload failed", error);
-            alert("Fotoğraf yüklenemedi. Sunucu uyuyor olabilir, tekrar dene.");
+            console.error("Conversion failed", error);
+            alert("Fotoğraf işlenemedi.");
         } finally {
             setIsUploading(false);
         }
@@ -76,7 +70,7 @@ const Home = () => {
         });
 
         socket.once('error', ({ message }) => {
-            alert(message);
+            alert("HATA: " + message);
             socket.disconnect();
         });
     };

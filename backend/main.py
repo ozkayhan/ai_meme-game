@@ -39,15 +39,7 @@ fastapi_app.add_middleware(
 async def root():
     return {"status": "active", "service": "meme-wars-backend"}
 
-@fastapi_app.post("/api/upload-temp")
-async def upload_temp(file: UploadFile = File(...)):
-    # In a real app, upload to Supabase Storage here.
-    # For MVP/Prototype, we might just return a mock URL or handle it if we have credentials.
-    # The TDD says: "Supabase Storage'a yükle."
-    
-    # TODO: Implement Supabase upload
-    # For now, return a dummy URL to unblock frontend dev if credentials aren't set.
-    return {"url": "https://placehold.co/512x512?text=Uploaded+Image"}
+# Upload endpoint removed - using Base64
 
 # Final App Assembly
 app = socketio.ASGIApp(sio, fastapi_app)

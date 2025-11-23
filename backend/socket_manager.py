@@ -25,8 +25,8 @@ async def disconnect(sid):
     if sid in socket_room_map:
         del socket_room_map[sid]
 
-@sio.event
-async def create_room_event(sid, data):
+@sio.on('create_room')
+async def on_create_room(sid, data):
     # data: { "nick": "...", "avatar_url": "..." }
     import uuid
     room_code = str(uuid.uuid4())[:4].upper() # Simple 4-char code
@@ -38,8 +38,8 @@ async def create_room_event(sid, data):
     await sio.emit('room_created', {"room_code": room_code}, room=sid)
     await sio.emit('room_update', room_data, room=room_code)
 
-@sio.event
-async def join_room_event(sid, data):
+@sio.on('join_room')
+async def on_join_room(sid, data):
     # data: { "room_code": "...", "nick": "...", "avatar_url": "..." }
     room_code = data.get("room_code")
     nick = data.get("nick")
@@ -54,8 +54,8 @@ async def join_room_event(sid, data):
     await sio.enter_room(sid, room_code)
     await sio.emit('room_update', room_data, room=room_code)
 
-@sio.event
-async def toggle_ready_event(sid, data):
+@sio.on('toggle_ready')
+async def on_toggle_ready(sid, data=None):
     room_code = socket_room_map.get(sid)
     if not room_code: return
     
@@ -63,8 +63,8 @@ async def toggle_ready_event(sid, data):
     if room_data:
         await sio.emit('room_update', room_data, room=room_code)
 
-@sio.event
-async def start_game_event(sid, data):
+@sio.on('start_game')
+async def on_start_game(sid, data=None):
     room_code = socket_room_map.get(sid)
     if not room_code: return
     
@@ -75,8 +75,8 @@ async def start_game_event(sid, data):
         
     await sio.emit('game_started', room_data, room=room_code)
 
-@sio.event
-async def submit_turn_event(sid, data):
+@sio.on('submit_turn')
+async def on_submit_turn(sid, data):
     # data: { "caption": "...", "target_id": "...", "template_id": "..." }
     room_code = socket_room_map.get(sid)
     if not room_code: return
@@ -94,41 +94,80 @@ async def submit_turn_event(sid, data):
         # Trigger AI Worker for each submission
         # This should ideally be a background task
         for sub in submissions:
-            # Mock AI generation for prototype
-            # In production, this would be an async task or callback
-            threading.Thread(target=mock_ai_process, args=(room_code, sub)).start()
+            # Trigger AI Worker for each submission
+            # This should ideally be a background task
+            trigger_ai_process(room_code, sub)
             
     else:
         # Notify that a player has submitted (optional)
         pass
 
-def mock_ai_process(room_code, submission):
-    import time
-    time.sleep(5) # Simulate processing time
-    
-    # Mock result
-    mock_url = f"https://placehold.co/600x600?text={submission['caption'].replace(' ', '+')}"
-    update_generated_image(room_code, submission["creator_id"], mock_url)
-    
-    # Check if all images are ready
+def trigger_ai_process(room_code, submission):
+    """Background task to call AI Service (Local)."""
+    import threading
+    threading.Thread(target=run_local_ai, args=(room_code, submission)).start()
+
+def run_local_ai(room_code, submission):
+    try:
+        from ai_service import swap_face_base64
+        
+        print(f"Processing AI for {submission['creator_id']}...")
+        
+        room_data = get_room(room_code)
+        if not room_data: return
+        
+        # Resolve Source (The 'Target' player selected by the user)
+        # This is now a Base64 string stored in the player's avatar_url field
+        target_player_id = submission['target_id']
+        source_b64 = room_data['players'][target_player_id]['avatar_url']
+        
+        # Resolve Target (The Template)
+        TEMPLATES = {
+            'batman': 'https://i.imgflip.com/434i5j.png',
+            'drake': 'https://i.imgflip.com/30b1gx.jpg',
+            'disaster': 'https://i.imgflip.com/23ls.jpg',
+            'distracted': 'https://i.imgflip.com/1ur9b0.jpg',
+            'buttons': 'https://i.imgflip.com/1g8my4.jpg'
+        }
+        target_url = TEMPLATES.get(submission['template_id'], TEMPLATES['batman'])
+        
+        caption = submission['caption']
+        
+        # Call Local AI
+        result_b64 = swap_face_base64(source_b64, target_url, caption)
+        
+        if result_b64:
+            print("AI Success! Generated Base64 image.")
+            update_generated_image(room_code, submission["creator_id"], result_b64)
+            check_round_completion(room_code)
+        else:
+            print("AI Failed to generate image.")
+            # Fallback mock
+            mock_url = f"https://placehold.co/600x600?text=AI+Failed"
+            update_generated_image(room_code, submission["creator_id"], mock_url)
+            check_round_completion(room_code)
+            
+    except Exception as e:
+        print(f"AI Worker Error: {e}")
+        # Fallback
+        mock_url = f"https://placehold.co/600x600?text=Error"
+        update_generated_image(room_code, submission["creator_id"], mock_url)
+        check_round_completion(room_code)
+
+def check_round_completion(room_code):
     room_data = get_room(room_code)
+    if not room_data: return
+    
     round_num = str(room_data["current_round"])
     all_ready = all(s.get("generated_image") for s in room_data["round_data"][round_num])
     
     if all_ready:
-        # Notify clients to move to voting
-        # We can reuse room_update, but maybe a specific event is better
-        # Or just update status to VOTING (if we had that status)
-        # For now, let's emit 'round_ready_for_vote' or just 'room_update' 
-        # and let frontend check if images exist.
-        # But frontend logic in Game.jsx was: socket.on('room_update', ...)
-        # Let's emit a specific event to be safe.
         sio.emit('room_update', room_data, room=room_code)
-        sio.emit('vote_start', room_data, room=room_code) # New event
+        sio.emit('vote_start', room_data, room=room_code)
 
 
-@sio.event
-async def submit_vote_event(sid, data):
+@sio.on('submit_vote')
+async def on_submit_vote(sid, data):
     # data: { "target_creator_id": "...", "stars": 5 }
     room_code = socket_room_map.get(sid)
     if not room_code: return

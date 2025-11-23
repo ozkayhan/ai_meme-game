@@ -83,7 +83,7 @@ const Game = () => {
         });
     };
 
-    if (isProcessing) return <Loader message="Yapay Zeka Pişiriyor... (Tahmini 45sn)" />;
+    if (isProcessing) return <Loader message="Yapay Zeka Pişiriyor... (Bu işlem 30-60sn sürebilir)" />;
     if (!roomData) return <Loader message="Oyun Yükleniyor..." />;
 
     const players = Object.entries(roomData.players || {});
